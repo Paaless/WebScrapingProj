@@ -48,7 +48,19 @@ app.get("/short_desc", async (request, response) => {
     console.error(error);
   }
 });
+app.get("/sentiment", async(request,response)=>{
+  try{
+    const {url} = request.query;
 
+    if(!url){
+      response.status(400).json({error: "URL parameter is required"});
+      return;
+    }
+
+  }catch(error){
+    console.error(error);
+  }
+});
 app.get("/long_desc", async (request, response) => {
   try {
     const websiteUrl = "https://wsa-test.vercel.app";
