@@ -1,19 +1,33 @@
-import vader from 'vader-sentiment';
+// Define lists of positive and negative words
+const positiveWords = ["good", "great", "awesome", "excellent","beautiful","joyful","pleasant","art","nature","positive vibe"];
+const negativeWords = ["bad", "horrible", "terrible","negative" ,"awful","pollution","high cost","overwhelming","junk","issues","waste"];
 
-const interpretSentiment = (score) => {
-  if (score >= 4) return "Strongly Positive";
-  if (score > 0) return "Positive";
-  if (score === 0) return "Neutral";
-  if (score > -4) return "Negative";
-  return "Strongly Negative";
-};
+function parseSentimentText(text) {
+  // Convert text to lowercase and split into words
+  const words = text.toLowerCase().split(' ');
 
-const parseSentimentText = (text) => {
-  const result = vader.SentimentIntensityAnalyzer.polarity_scores(text);
-  console.log("Result is : "+result.compound);
-  const humanReadable = interpretSentiment(result.compound);
-  console.log("Human readable result is: "+ humanReadable);
-  return humanReadable;
-};
+  // Initialize sentiment scores
+  let positiveScore = 0;
+  let negativeScore = 0;
 
-export { parseSentimentText };
+  // Analyze each word in the text
+  words.forEach(word => {
+    if (positiveWords.includes(word)) {
+      positiveScore++;
+    } else if (negativeWords.includes(word)) {
+      negativeScore++;
+    }
+  });
+
+  // Determine the overall sentiment
+  if (positiveScore > negativeScore) {
+    return "Positive";
+  } else if (negativeScore > positiveScore) {
+    return "Negative";
+  } else {
+    return "Neutral";
+  }
+}
+
+export {parseSentimentText}
+

@@ -51,7 +51,7 @@ app.get("/short_desc", async (request, response) => {
 
 app.get("/long_desc", async (request, response) => {
   try {
-    const websiteUrl = "https://wsa-test.vercel.app/";
+    const websiteUrl = "https://wsa-test.vercel.app";
     
     // Check if the data is already cached
     const cachedData = myCache.get("longDescData");
@@ -65,12 +65,19 @@ app.get("/long_desc", async (request, response) => {
       const data = await findHrefs(content);
       const objects = await parsePages(data);
       const text = await getPageInfo(data);
-    
+      
       // Ensure all promises are resolved and synchronized
       const sentimentPromises = objects.map(async (item, index) => ({
         title: item.title,
         short_description: item.description,
         sentiment: await parseSentimentText(text[index]),
+        image: {
+          src: websiteUrl+item.image.src,
+          width:item.image.width,
+          height:item.image.height,
+        },
+        href: websiteUrl+"/blog/"+item.slug,
+        word_count : await countWords(text[index]),
       }));
     
       // Await all sentiment promises and get the resolved values
@@ -87,7 +94,16 @@ app.get("/long_desc", async (request, response) => {
   }
 });
 
+async function countWords(text){
+  
+  const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_'`~()?]/g, '').split(/\s+/);
 
+  const filteredWords = words.filter(word => word !== '');
+
+  const wordCount = filteredWords.length;
+
+  return wordCount;
+}
 async function parsePages(pages) {
   try {
     const dataArray = [];
