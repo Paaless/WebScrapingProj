@@ -1,29 +1,49 @@
-import express, { request, response } from "express";
-import axios from "axios";
+import express from "express";
 import puppeteer from "puppeteer";
-import cheerio, { html } from "cheerio";
+import cheerio from "cheerio";
+import cache from "memory-cache";
 import { parseSentimentText } from "./sentiment.js";
 
 const app = express();
 app.use(express.json());
+const myCache = new cache.Cache();
 
 app.listen(3000, () => {
   console.log("Server Listening on PORT:", 3000);
+  
 });
 
 app.get("/short_desc", async (request, response) => {
   try {
-    const content = await scrapeWebsite("https://wsa-test.vercel.app/");
-    const data = await findHrefs(content);
-    const objects = await parsePages(data);
-    //response.json(objects);
-    const parsed_response = objects.map((item) => ({
-      title: item.title,
-      short_description: item.description,
-    }));
+    // Check if the data is already cached
+    const cachedData = myCache.get("objects");
 
-    response.json(parsed_response);
-    console.log(parsed_response);
+    if (cachedData) {
+      // If data is cached, use it
+      const parsed_response = cachedData.map((item) => ({
+        title: item.title,
+        short_description: item.description,
+      }));
+
+      response.json(parsed_response);
+      console.log(parsed_response);
+    } else {
+      // If data isn't cached, load and store it
+      const content = await scrapeWebsite("https://wsa-test.vercel.app/");
+      const data = await findHrefs(content);
+      const objects = await parsePages(data);
+
+      // Store the data in the cache with a specific expiration time (e.g., 10 minutes)
+      myCache.put("objects", objects, 600000); // 600,000 milliseconds = 10 minutes
+
+      const parsed_response = objects.map((item) => ({
+        title: item.title,
+        short_description: item.description,
+      }));
+
+      response.json(parsed_response);
+      console.log(parsed_response);
+    }
   } catch (error) {
     console.error(error);
   }
@@ -31,26 +51,42 @@ app.get("/short_desc", async (request, response) => {
 
 app.get("/long_desc", async (request, response) => {
   try {
-    const content = await scrapeWebsite("https://wsa-test.vercel.app/");
-    const data = await findHrefs(content);
-    const objects = await parsePages(data);
-    const text = await getPageInfo(data);
-
-    // Ensure all promises are resolved and synchronized
-    const sentimentPromises = objects.map(async (item, index) => ({
-      title: item.title,
-      short_description: item.description,
-      sentiment: await parseSentimentText(text[index]),
-    }));
-
-    // Await all sentiment promises and get the resolved values
-    const parsed_response = await Promise.all(sentimentPromises);
-
-    response.json(parsed_response); // Return the extracted text as JSON
+    const websiteUrl = "https://wsa-test.vercel.app/";
+    
+    // Check if the data is already cached
+    const cachedData = myCache.get("longDescData");
+    
+    if (cachedData) {
+      response.json(cachedData);
+      console.log(cachedData);
+    } else {
+      // Fetch the content and process it
+      const content = await scrapeWebsite(websiteUrl);
+      const data = await findHrefs(content);
+      const objects = await parsePages(data);
+      const text = await getPageInfo(data);
+    
+      // Ensure all promises are resolved and synchronized
+      const sentimentPromises = objects.map(async (item, index) => ({
+        title: item.title,
+        short_description: item.description,
+        sentiment: await parseSentimentText(text[index]),
+      }));
+    
+      // Await all sentiment promises and get the resolved values
+      const parsed_response = await Promise.all(sentimentPromises);
+    
+      // Store the processed data in the cache with an expiration time
+      myCache.put("longDescData", parsed_response, 600000); // 600,000 milliseconds = 10 minutes
+    
+      response.json(parsed_response); // Return the extracted text as JSON
+      console.log(parsed_response);
+    }
   } catch (error) {
     console.error(error);
   }
 });
+
 
 async function parsePages(pages) {
   try {
