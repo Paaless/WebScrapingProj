@@ -10,7 +10,6 @@ const myCache = new cache.Cache();
 
 app.listen(3000, () => {
   console.log("Server Listening on PORT:", 3000);
-  
 });
 
 app.get("/short_desc", async (request, response) => {
@@ -33,7 +32,6 @@ app.get("/short_desc", async (request, response) => {
       const data = await findHrefs(content);
       const objects = await parsePages(data);
 
-      // Store the data in the cache with a specific expiration time (e.g., 10 minutes)
       myCache.put("objects", objects, 600000); // 600,000 milliseconds = 10 minutes
 
       const parsed_response = objects.map((item) => ({
@@ -48,26 +46,57 @@ app.get("/short_desc", async (request, response) => {
     console.error(error);
   }
 });
-app.get("/sentiment", async(request,response)=>{
-  try{
-    const {url} = request.query;
+app.get("/sentiment", async (request, response) => {
+  try {
+    const slug = request.headers.slug;
+    const url = `https://wsa-test.vercel.app/blog/${slug}`;
 
-    if(!url){
-      response.status(400).json({error: "URL parameter is required"});
+    if (!slug) {
+      response.status(400).json({ error: "Slug parameter is required" });
       return;
     }
 
-  }catch(error){
+    const cachedData = myCache.get("longDescData");
+
+    if (cachedData) {
+      const matchingData = cachedData.find((data) => data.slug === slug);
+
+      if (matchingData) {
+        const result = {
+          sentiment: matchingData.sentiment,
+        };
+        response.json(result);
+      } else {
+        // Data not found in cache, fetch and calculate sentiment
+        const text = await scrapeWebsite(url); // Scrape the page content
+        const sentiment_value = await parseSentimentText(text); // Calculate sentiment
+        const result = {
+          sentiment: sentiment_value,
+        };
+        response.json(result);
+      }
+    } else {
+      // No cached data, fetch and calculate sentiment
+      const text = await scrapeWebsite(url); // Scrape the page content
+      const sentiment_value = await parseSentimentText(text); // Calculate sentiment
+      const result = {
+        sentiment: sentiment_value,
+      };
+      response.json(result);
+    }
+  } catch (error) {
     console.error(error);
+    response.status(500).json({ error: "Internal server error" });
   }
 });
+
 app.get("/long_desc", async (request, response) => {
   try {
     const websiteUrl = "https://wsa-test.vercel.app";
-    
+
     // Check if the data is already cached
     const cachedData = myCache.get("longDescData");
-    
+
     if (cachedData) {
       response.json(cachedData);
       console.log(cachedData);
@@ -76,28 +105,28 @@ app.get("/long_desc", async (request, response) => {
       const content = await scrapeWebsite(websiteUrl);
       const data = await findHrefs(content);
       const objects = await parsePages(data);
-      const text = await getPageInfo(data);
-      
+      const text = await getPagesInfo(data);
+
       // Ensure all promises are resolved and synchronized
       const sentimentPromises = objects.map(async (item, index) => ({
         title: item.title,
         short_description: item.description,
         sentiment: await parseSentimentText(text[index]),
         image: {
-          src: websiteUrl+item.image.src,
-          width:item.image.width,
-          height:item.image.height,
+          src: websiteUrl + item.image.src,
+          width: item.image.width,
+          height: item.image.height,
         },
-        href: websiteUrl+"/blog/"+item.slug,
-        word_count : await countWords(text[index]),
+        href: websiteUrl + "/blog/" + item.slug,
+        slug: item.slug,
+        word_count: await countWords(text[index]),
       }));
-    
+
       // Await all sentiment promises and get the resolved values
       const parsed_response = await Promise.all(sentimentPromises);
-    
-      // Store the processed data in the cache with an expiration time
+
       myCache.put("longDescData", parsed_response, 600000); // 600,000 milliseconds = 10 minutes
-    
+
       response.json(parsed_response); // Return the extracted text as JSON
       console.log(parsed_response);
     }
@@ -106,16 +135,47 @@ app.get("/long_desc", async (request, response) => {
   }
 });
 
-async function countWords(text){
-  
-  const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_'`~()?]/g, '').split(/\s+/);
+async function countWords(text) {
+  const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_'`~()?]/g, "").split(/\s+/);
 
-  const filteredWords = words.filter(word => word !== '');
+  const filteredWords = words.filter((word) => word !== "");
 
   const wordCount = filteredWords.length;
 
   return wordCount;
 }
+
+async function parseSinglePage(page) {
+  try {
+    const pageContent = await scrapeWebsite(page);
+    // Load the HTML into Cheerio
+    const $ = cheerio.load(pageContent);
+
+    // Find the script element with id="__NEXT_DATA__"
+    const scriptElement = $("script#__NEXT_DATA__");
+
+    if (scriptElement.length > 0) {
+      // Extract the content of the script element
+      const scriptContent = scriptElement.html();
+
+      // Parse the script content as JSON
+      try {
+        const jsonData = JSON.parse(scriptContent);
+
+        const extractedData = jsonData.props.pageProps.post;
+        return extractedData;
+      } catch (error) {
+        console.error("Error parsing JSON:", error);
+      }
+    } else {
+      console.error("Script element not found");
+    }
+    
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 async function parsePages(pages) {
   try {
     const dataArray = [];
@@ -179,7 +239,7 @@ function extractText(element, $) {
   return text.trim();
 }
 
-async function getPageInfo(pages) {
+async function getPagesInfo(pages) {
   try {
     const allTextArray = []; // Array to store extracted text from all pages
     for (const [key, value] of Object.entries(pages)) {
