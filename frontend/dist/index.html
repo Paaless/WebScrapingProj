@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WSA Scraper</title>
+    <!-- Include Tailwind CSS from a CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-200">
+    <div class="container mx-auto py-10">
+        <div class="bg-white p-6 rounded-lg shadow-md max-w-md mx-auto">
+            <h1 class="text-2xl font-semibold text-center mb-4">Web Scraper</h1>
+            
+            <!-- Input Box -->
+            <div class="mb-4">
+                <label for="input" class="block text-gray-600 text-sm font-semibold">Link</label>
+                <input id="input" type="text" class="w-full px-3 py-2 border rounded-lg shadow-inner focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-200" placeholder="Enter link">
+            </div>
+            
+            <!-- Dropdown List -->
+            <div class="mb-4">
+                <label for="dropdown" class="block text-gray-600 text-sm font-semibold">Type</label>
+                <select id="dropdown" class="w-full px-3 py-2 border rounded-lg shadow-inner focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-200">
+                    <option value="short_desc">Short description</option>
+                    <option value="long_desc">Long description</option>
+                    <option value="sentiment">Sentiment analysis</option>
+                </select>
+            </div>
+            
+            <!-- Submit Button -->
+            <div class="mb-4">
+                <button id="submit" class="w-full bg-blue-500 text-white font-semibold py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring focus:ring-blue-200">Submit</button>
+            </div>
+            
+            <!-- Output Box -->
+            <div>
+                <label for="output" class="block text-gray-600 text-sm font-semibold">Result</label>
+                <textarea id="output" class="w-full px-3 py-2 border rounded-lg shadow-inner focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-200" rows="4" placeholder="Results will appear here" readonly></textarea>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
