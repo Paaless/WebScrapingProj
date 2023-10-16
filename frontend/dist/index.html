@@ -40,5 +40,35 @@
             </div>
         </div>
     </div>
+
+    <script>
+       document.getElementById("submit").addEventListener("click", async () => {
+    const input = document.getElementById("input").value;
+    const dropdown = document.getElementById("dropdown").value;
+    const apiBaseURL = "http://localhost:3000"; // Update with your server URL
+    const apiEndpoint = `${apiBaseURL}/api?link=${input}&type=${dropdown}`;
+    const outputElement = document.getElementById("output");
+
+    try {
+        // Display a loading message while waiting for the response
+        outputElement.value = "Loading...";
+
+        const response = await fetch(apiEndpoint, { timeout: 15000 }); // Adjust the timeout value as needed (in milliseconds)
+
+        if (response.status === 200) {
+            const result = await response.json();
+            outputElement.value = JSON.stringify(result, null, 2);
+        } else {
+            outputElement.value = `Error: ${response.status} - ${response.statusText}`;
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        outputElement.value = `Error: Could not fetch data. ${error.message}`;
+    }
+});
+
+
+
+    </script>
 </body>
 </html>

@@ -1,88 +1,148 @@
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 import express from "express";
 import puppeteer from "puppeteer";
 import cheerio from "cheerio";
 import cache from "memory-cache";
 import { parseSentimentText } from "./sentiment.js";
+import cors from "cors";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
+app.use(cors({ origin: "http://127.0.0.1:5500" }));
 app.use(express.json());
+
 const myCache = new cache.Cache();
 
 app.listen(3000, () => {
   console.log("Server Listening on PORT:", 3000);
 });
 
-app.get("/short_desc", async (request, response) => {
+app.use(express.static(__dirname));
+
+app.get("/api", async (request, response) => {
   try {
-    // Check if the data is already cached
-    const cachedData = myCache.get("objects");
+    const { link, type } = request.query;
 
-    if (cachedData) {
-      // If data is cached, use it
-      const parsed_response = cachedData.map((item) => ({
-        title: item.title,
-        short_description: item.description,
-      }));
-
-      response.json(parsed_response);
-      console.log(parsed_response);
-    } else {
-      // If data isn't cached, load and store it
-      const content = await scrapeWebsite("https://wsa-test.vercel.app/");
-      const data = await findHrefs(content);
-      const objects = await parsePages(data);
-
-      myCache.put("objects", objects, 600000); // 600,000 milliseconds = 10 minutes
-
-      const parsed_response = objects.map((item) => ({
-        title: item.title,
-        short_description: item.description,
-      }));
-
-      response.json(parsed_response);
-      console.log(parsed_response);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-});
-app.get("/sentiment", async (request, response) => {
-  try {
-    const slug = request.headers.slug;
-    const url = `https://wsa-test.vercel.app/blog/${slug}`;
-
-    if (!slug) {
-      response.status(400).json({ error: "Slug parameter is required" });
-      return;
+    if (!link || !type) {
+      return response
+        .status(400)
+        .json({ error: "Link and type parameters are required" });
     }
 
-    const cachedData = myCache.get("longDescData");
+    switch (type) {
+      case "short_desc":
+        const cachedData = myCache.get("objects");
+        if (cachedData) {
+          const parsed_response = cachedData.map((item) => ({
+            title: item.title,
+            short_description: item.description,
+          }));
+          response.json(parsed_response);
+        } else {
+          const content = await scrapeWebsite(link);
+          const data = await findHrefs(content);
+          const objects = await parsePages(data);
+          myCache.put("objects", objects, 600000); // 600,000 milliseconds = 10 minutes
+          const parsed_response = objects.map((item) => ({
+            title: item.title,
+            short_description: item.description,
+          }));
+          console.log(parsed_response);
+          response.json(parsed_response);
+        }
+        break;
 
-    if (cachedData) {
-      const matchingData = cachedData.find((data) => data.slug === slug);
+      case "sentiment":
+        const slug = request.headers.slug;
+        const url = `https://wsa-test.vercel.app/blog/${slug}`;
 
-      if (matchingData) {
-        const result = {
-          sentiment: matchingData.sentiment,
-        };
-        response.json(result);
-      } else {
-        // Data not found in cache, fetch and calculate sentiment
-        const text = await scrapeWebsite(url); // Scrape the page content
-        const sentiment_value = await parseSentimentText(text); // Calculate sentiment
-        const result = {
-          sentiment: sentiment_value,
-        };
-        response.json(result);
-      }
-    } else {
-      // No cached data, fetch and calculate sentiment
-      const text = await scrapeWebsite(url); // Scrape the page content
-      const sentiment_value = await parseSentimentText(text); // Calculate sentiment
-      const result = {
-        sentiment: sentiment_value,
-      };
-      response.json(result);
+        if (!slug) {
+          response.status(400).json({ error: "Slug parameter is required" });
+          return;
+        }
+
+        const cachedDataSentiment = myCache.get("longDescData");
+
+        if (cachedDataSentiment) {
+          const matchingData = cachedDataSentiment.find(
+            (data) => data.slug === slug
+          );
+
+          if (matchingData) {
+            const result = {
+              sentiment: matchingData.sentiment,
+            };
+            console.log(result);
+            response.json(result);
+          } else {
+            const text = await scrapeWebsite(url);
+            const sentiment_value = await parseSentimentText(text);
+            const result = {
+              sentiment: sentiment_value,
+            };
+            console.log(result);
+            response.json(result);
+          }
+        } else {
+          const text = await scrapeWebsite(url);
+          const sentiment_value = await parseSentimentText(text);
+          const result = {
+            sentiment: sentiment_value,
+          };
+          response.json(result);
+        }
+        break;
+
+      case "long_desc":
+        const websiteUrl = link;
+
+        const cachedDataLongDesc = myCache.get("longDescData");
+
+        if (cachedDataLongDesc) {
+          console.log(cachedDataLongDesc);
+          response.json(cachedDataLongDesc);
+        } else {
+          const content = await scrapeWebsite(websiteUrl);
+          const data = await findHrefs(content);
+          const objects = await parsePages(data);
+
+          const textPromises = Object.values(data).map(async (item) => {
+            const website = "https://wsa-test.vercel.app" + item;
+            const pageContent = await scrapeWebsite(website);
+            const $ = cheerio.load(pageContent);
+            return extractText($("html"), $);
+          });
+          
+          const text = await Promise.all(textPromises);
+          
+          console.log(text);
+          const sentimentPromises = objects.map(async (item, index) => ({
+            title: item.title,
+            short_description: item.description,
+            sentiment: await parseSentimentText(text[index]),
+            image: {
+              src: websiteUrl + item.image.src,
+              width: item.image.width,
+              height: item.image.height,
+            },
+            href: websiteUrl + "/blog/" + item.slug,
+            slug: item.slug,
+            word_count: await countWords(text[index]),
+          }));
+
+          const parsed_response = await Promise.all(sentimentPromises);
+
+          myCache.put("longDescData", parsed_response, 600000);
+          console.log(parsed_response);
+          response.json(parsed_response);
+        }
+        break;
+
+      default:
+        response.status(400).json({ error: "Invalid type parameter" });
     }
   } catch (error) {
     console.error(error);
@@ -90,78 +150,24 @@ app.get("/sentiment", async (request, response) => {
   }
 });
 
-app.get("/long_desc", async (request, response) => {
-  try {
-    const websiteUrl = "https://wsa-test.vercel.app";
-
-    // Check if the data is already cached
-    const cachedData = myCache.get("longDescData");
-
-    if (cachedData) {
-      response.json(cachedData);
-      console.log(cachedData);
-    } else {
-      // Fetch the content and process it
-      const content = await scrapeWebsite(websiteUrl);
-      const data = await findHrefs(content);
-      const objects = await parsePages(data);
-      const text = await getPagesInfo(data);
-
-      // Ensure all promises are resolved and synchronized
-      const sentimentPromises = objects.map(async (item, index) => ({
-        title: item.title,
-        short_description: item.description,
-        sentiment: await parseSentimentText(text[index]),
-        image: {
-          src: websiteUrl + item.image.src,
-          width: item.image.width,
-          height: item.image.height,
-        },
-        href: websiteUrl + "/blog/" + item.slug,
-        slug: item.slug,
-        word_count: await countWords(text[index]),
-      }));
-
-      // Await all sentiment promises and get the resolved values
-      const parsed_response = await Promise.all(sentimentPromises);
-
-      myCache.put("longDescData", parsed_response, 600000); // 600,000 milliseconds = 10 minutes
-
-      response.json(parsed_response); // Return the extracted text as JSON
-      console.log(parsed_response);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-});
-
 async function countWords(text) {
   const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_'`~()?]/g, "").split(/\s+/);
-
   const filteredWords = words.filter((word) => word !== "");
-
   const wordCount = filteredWords.length;
-
   return wordCount;
 }
 
 async function parseSinglePage(page) {
   try {
     const pageContent = await scrapeWebsite(page);
-    // Load the HTML into Cheerio
     const $ = cheerio.load(pageContent);
-
-    // Find the script element with id="__NEXT_DATA__"
     const scriptElement = $("script#__NEXT_DATA__");
 
     if (scriptElement.length > 0) {
-      // Extract the content of the script element
       const scriptContent = scriptElement.html();
 
-      // Parse the script content as JSON
       try {
         const jsonData = JSON.parse(scriptContent);
-
         const extractedData = jsonData.props.pageProps.post;
         return extractedData;
       } catch (error) {
@@ -170,7 +176,6 @@ async function parseSinglePage(page) {
     } else {
       console.error("Script element not found");
     }
-    
   } catch (error) {
     console.error(error);
   }
@@ -182,22 +187,15 @@ async function parsePages(pages) {
     for (const [key, value] of Object.entries(pages)) {
       const website = "https://wsa-test.vercel.app" + value;
       const pageContent = await scrapeWebsite(website);
-      // Load the HTML into Cheerio
       const $ = cheerio.load(pageContent);
-
-      // Find the script element with id="__NEXT_DATA__"
       const scriptElement = $("script#__NEXT_DATA__");
 
       if (scriptElement.length > 0) {
-        // Extract the content of the script element
         const scriptContent = scriptElement.html();
 
-        // Parse the script content as JSON
         try {
           const jsonData = JSON.parse(scriptContent);
-
           const extractedData = jsonData.props.pageProps.post;
-
           dataArray.push(extractedData);
         } catch (error) {
           console.error("Error parsing JSON:", error);
@@ -221,49 +219,53 @@ async function findHrefs(html) {
       const key = href.split("/blog/")[1];
       objects[key] = href;
     });
-
     return objects;
   } catch (error) {
     console.error("Error:", error);
   }
 }
-function extractText(element, $) {
-  let text = "";
-  element.contents().each(function () {
+
+async function extractText(element, $) {
+  const textPromises = element.contents().map(async function () {
     if (this.type === "text") {
-      text += $(this).text() + " ";
+      return $(this).text();
     } else if (this.type === "tag") {
-      text += extractText($(this), $) + " "; // Pass $ as an argument
+      return extractText($(this), $);
     }
-  });
-  return text.trim();
-}
-
-async function getPagesInfo(pages) {
-  try {
-    const allTextArray = []; // Array to store extracted text from all pages
-    for (const [key, value] of Object.entries(pages)) {
-      const website = "https://wsa-test.vercel.app" + value;
-      const pageContent = await scrapeWebsite(website);
-
-      // Load the HTML into Cheerio
-      const $ = cheerio.load(pageContent);
-
-      const allTextPromise = extractText($("html"), $);
-      allTextArray.push(allTextPromise);
-    }
-
-    // Await all promises and get the resolved values
-    const allText = await Promise.all(allTextArray);
-    const asciiCode = String.fromCharCode(8594);
-
+    ```
     const withoutBackToArticles = allText.map((text) => {
       return text.replace(/ Back to Articles /, "").trim();
     });
     const cleanedText = withoutBackToArticles.map((text) => {
       return text.replace(new RegExp(asciiCode, "g"), "");
     });
+    ```
+  });
 
+  const textArray = await Promise.all(textPromises);
+  return textArray.join(" ").trim();
+}
+
+
+async function getPagesInfo(pages) {
+  try {
+    const allTextArray = [];
+    for (const [key, value] of Object.entries(pages)) {
+      const website = "https://wsa-test.vercel.app" + value;
+      const pageContent = await scrapeWebsite(website);
+      const $ = cheerio.load(pageContent);
+      const allTextPromise = extractText($("html"), $);
+      allTextArray.push(allTextPromise);
+    }
+
+    const allText = await Promise.all(allTextArray);
+    const asciiCode = String.fromCharCode(8594);
+    const withoutBackToArticles = allText.map((text) => {
+      return text.replace(/ Back to Articles /, "").trim();
+    });
+    const cleanedText = withoutBackToArticles.map((text) => {
+      return text.replace(new RegExp(asciiCode, "g"), "");
+    });
     return cleanedText;
   } catch (error) {
     console.error(error);
@@ -274,18 +276,10 @@ async function scrapeWebsite(website) {
   try {
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
-
-    // Navigate to the target website
     await page.goto(website);
-
-    // Wait for some time to ensure the content is loaded
     await page.waitForTimeout(3000);
-
-    // Get HTML content
     const pageContent = await page.content();
-
     await browser.close();
-
     return pageContent;
   } catch (error) {
     console.error("Error:", error);
