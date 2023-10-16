@@ -68,11 +68,11 @@ Parameters:
 html (string): The HTML content to search for href attributes.
 Returns:
 An object where keys are extracted identifiers, and values are corresponding href attributes.
-5. extractText(element, $)
+5. extractText(element, "$" )
 Description: Extracts and cleans text content from HTML elements.
 Parameters:
 element (object): HTML element to extract text from.
-$ (object): Cheerio instance.
+"$" (object): Cheerio instance.
 Returns:
 A cleaned text string.
 6. getPagesInfo(pages)
