@@ -1,0 +1,17 @@
+1.Make a local copy on your machine
+2.Open the folder WebScrapingProj
+3.Run the 2 batch files.If you think they're malicious just save the 2 bash files as ".bat" and run them. Also you can manually type the commands in the bash files starting from the root folder.
+
+Prerequisites:
+
+nodejs
+puppeteer
+express
+cheerio
+memory-cache
+cors
+url
+path
+
+If not installed run this command
+npm install node-fetch puppeteer express cheerio memory-cache cors url path
