@@ -105,11 +105,12 @@ async function extractText(element, $) {
   return cleanedText.join(" ").trim();
 }
 
-async function getPagesInfo(pages) {
+async function getPagesInfo(pages,link) {
   try {
     const allTextArray = [];
+    const modifiedLink = link.slice(0,-1)
     for (const [key, value] of Object.entries(pages)) {
-      const website = "https://wsa-test.vercel.app" + value;
+      const website = modifiedLink + value;
       const pageContent = await scrapeWebsite(website);
       const $ = cheerio.load(pageContent);
       const allTextPromise = extractText($("html"), $);

@@ -110,7 +110,8 @@ app.get("/api", async (request, response) => {
           const objects = await parsePages(data);
 
           const textPromises = Object.values(data).map(async (item) => {
-            const website = "https://wsa-test.vercel.app" + item;
+            const modifiedLink = link.slice(0, -1);
+            const website = modifiedLink + item;
             const pageContent = await scrapeWebsite(website);
             const $ = cheerio.load(pageContent);
             return extractText($("html"), $);
